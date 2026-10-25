@@ -14,6 +14,10 @@ from tam.identidade.models import UsuarioModel
 from tam.identidade.schemas import PerfilUsuario
 from tam.projeto.models import ProjetoModel, SaudeProjeto, StatusProjeto
 from tam.tarefa.models import PrioridadeTarefa, StatusTarefa, TarefaModel
+from tam.treinamento.models import (
+    MatriculaTreinamentoModel,
+    TreinamentoModel,
+)
 
 TEST_DB_NAME = 'tam_test'
 SENHA_PADRAO = 'senha-segura-123'
@@ -26,7 +30,13 @@ def client():
     async def init_test_db():
         await init_beanie(
             database=mongo[TEST_DB_NAME],
-            document_models=[UsuarioModel, ProjetoModel, TarefaModel],
+            document_models=[
+                UsuarioModel,
+                TreinamentoModel,
+                MatriculaTreinamentoModel,
+                ProjetoModel,
+                TarefaModel,
+            ]
         )
 
     mp = pytest.MonkeyPatch()
@@ -43,6 +53,8 @@ def client():
 @pytest.fixture(autouse=True)
 def limpar_banco(client):
     client.portal.call(UsuarioModel.delete_all)
+    client.portal.call(TreinamentoModel.delete_all)
+    client.portal.call(MatriculaTreinamentoModel.delete_all)
     client.portal.call(ProjetoModel.delete_all)
     client.portal.call(TarefaModel.delete_all)
 

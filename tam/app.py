@@ -6,7 +6,7 @@ from tam.core.database import init_db
 from tam.identidade.routers import auth, usuarios
 from tam.projeto.routers import projeto
 from tam.tarefa.routers import tarefa
-
+from tam.treinamento.routers import matricula, treinamento
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,5 +18,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(auth.router)
 app.include_router(usuarios.router)
+app.include_router(treinamento.router)
+app.include_router(matricula.router)
 app.include_router(projeto.router)
 app.include_router(tarefa.router)
