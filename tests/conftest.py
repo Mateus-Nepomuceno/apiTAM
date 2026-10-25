@@ -13,6 +13,7 @@ from tam.core.settings import Settings
 from tam.identidade.models import UsuarioModel
 from tam.identidade.schemas import PerfilUsuario
 from tam.projeto.models import ProjetoModel, SaudeProjeto, StatusProjeto
+from tam.tarefa.models import PrioridadeTarefa, StatusTarefa, TarefaModel
 
 TEST_DB_NAME = 'tam_test'
 SENHA_PADRAO = 'senha-segura-123'
@@ -25,7 +26,7 @@ def client():
     async def init_test_db():
         await init_beanie(
             database=mongo[TEST_DB_NAME],
-            document_models=[UsuarioModel, ProjetoModel],
+            document_models=[UsuarioModel, ProjetoModel, TarefaModel],
         )
 
     mp = pytest.MonkeyPatch()
@@ -43,6 +44,7 @@ def client():
 def limpar_banco(client):
     client.portal.call(UsuarioModel.delete_all)
     client.portal.call(ProjetoModel.delete_all)
+    client.portal.call(TarefaModel.delete_all)
 
 
 @pytest.fixture
@@ -117,5 +119,34 @@ def criar_projeto(client, admin):
         )
         client.portal.call(projeto.insert)
         return projeto
+
+    return _criar
+
+
+@pytest.fixture
+def criar_tarefa(client, admin):
+    contador = count()
+
+    def _criar(criador=None, responsavel=None, **campos):
+        n = next(contador)
+        criador_usuario = criador or admin
+        agora = datetime.now(timezone.utc)
+        tarefa = TarefaModel(
+            titulo=campos.get('titulo', f'Tarefa {n}'),
+            descricao=campos.get('descricao', f'Descrição da tarefa {n}'),
+            projeto_id=campos.get('projeto_id', None),
+            responsavel_id=responsavel.id if responsavel else None,
+            criador_id=criador_usuario.id,
+            status=campos.get('status', StatusTarefa.PENDENTE),
+            prioridade=campos.get('prioridade', PrioridadeTarefa.MEDIA),
+            etiquetas=campos.get('etiquetas', []),
+            checklist=campos.get('checklist', []),
+            comentarios=campos.get('comentarios', []),
+            historico_status=campos.get('historico_status', []),
+            data_inicio=campos.get('data_inicio', agora),
+            data_prazo=campos.get('data_prazo', agora + timedelta(days=7)),
+        )
+        client.portal.call(tarefa.insert)
+        return tarefa
 
     return _criar
