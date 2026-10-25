@@ -2,6 +2,8 @@ from beanie import init_beanie
 from pymongo import AsyncMongoClient
 
 from tam.identidade.models import UsuarioModel
+from tam.projeto.models import ProjetoModel
+from tam.tarefa.models import TarefaModel
 from tam.treinamento.models import (
     MatriculaTreinamentoModel,
     TreinamentoModel,
@@ -20,5 +22,7 @@ async def init_db():
             UsuarioModel,
             TreinamentoModel,
             MatriculaTreinamentoModel,
-        ],
+            ProjetoModel,
+            TarefaModel,
+        ]
     )

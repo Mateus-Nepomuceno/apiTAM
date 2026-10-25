@@ -19,3 +19,7 @@ htmlcov/
 database.db
 
 .devcontainer/
+
+AGENTS.md
+CLAUDE.md
+GEMINI.md
