@@ -11,6 +11,10 @@ from tam.core.security import get_password_hash
 from tam.core.settings import Settings
 from tam.identidade.models import UsuarioModel
 from tam.identidade.schemas import PerfilUsuario
+from tam.treinamento.models import (
+    MatriculaTreinamentoModel,
+    TreinamentoModel,
+)
 
 TEST_DB_NAME = 'tam_test'
 SENHA_PADRAO = 'senha-segura-123'
@@ -22,7 +26,12 @@ def client():
 
     async def init_test_db():
         await init_beanie(
-            database=mongo[TEST_DB_NAME], document_models=[UsuarioModel]
+            database=mongo[TEST_DB_NAME],
+            document_models=[
+                UsuarioModel,
+                TreinamentoModel,
+                MatriculaTreinamentoModel,
+            ],
         )
 
     mp = pytest.MonkeyPatch()
@@ -39,6 +48,8 @@ def client():
 @pytest.fixture(autouse=True)
 def limpar_banco(client):
     client.portal.call(UsuarioModel.delete_all)
+    client.portal.call(TreinamentoModel.delete_all)
+    client.portal.call(MatriculaTreinamentoModel.delete_all)
 
 
 @pytest.fixture
