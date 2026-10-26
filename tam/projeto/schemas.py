@@ -17,15 +17,16 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 
 class MarcoSchema(BaseModel):
     titulo: str
-    data_prevista: datetime
+    data_prevista: Optional[datetime] = None
     concluido: bool = False
 
 
 class HistoricoStatusSchema(BaseModel):
-    status_anterior: StatusProjeto
+    status_anterior: Optional[StatusProjeto] = None
     status_novo: StatusProjeto
     data_alteracao: datetime
     autor_id: PyObjectId
+    nota: str = ''
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -44,6 +45,7 @@ class ProjetoBase(BaseModel):
 
 class ProjetoCreate(ProjetoBase):
     responsavel_id: PydanticObjectId
+    percentual_progresso: float = Field(default=0.0, ge=0.0, le=100.0)
     membros_equipe: list[PydanticObjectId] = Field(default_factory=list)
     marcos: list[MarcoSchema] = Field(default_factory=list)
 

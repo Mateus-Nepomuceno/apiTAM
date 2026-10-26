@@ -79,9 +79,6 @@ def ids(response):
     return {item['_id'] for item in response.json()}
 
 
-# ---------------------------------------------------------------- treinamento
-
-
 @pytest.mark.parametrize('perfil', ['gestor', 'admin'])
 def test_gestao_cria_treinamento(client, token_de, request, perfil):
     usuario = request.getfixturevalue(perfil)
@@ -376,17 +373,78 @@ def test_membro_nao_apaga_treinamento(client, token_de, membro, treinamento):
     assert buscar_treinamento(client, treinamento.id) is not None
 
 
-def test_nao_apaga_treinamento_com_matriculas(
+def test_apagar_treinamento_remove_matriculas(
     client, token_de, gestor, membro, treinamento, matricular
 ):
-    matricular(membro, treinamento)
+    matricula = matricular(membro, treinamento)
 
     response = client.delete(
         f'/treinamentos/{treinamento.id}', headers=token_de(gestor)
     )
 
-    assert response.status_code == HTTPStatus.CONFLICT
-    assert buscar_treinamento(client, treinamento.id) is not None
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert buscar_treinamento(client, treinamento.id) is None
+    assert buscar_matricula(client, matricula.id) is None
+
+
+def test_gestor_que_nao_e_instrutor_nao_altera_treinamento(
+    client, token_de, criar_usuario, treinamento
+):
+    outro_gestor = criar_usuario(PerfilUsuario.GESTOR)
+
+    response = client.patch(
+        f'/treinamentos/{treinamento.id}',
+        json={'titulo': 'X'},
+        headers=token_de(outro_gestor),
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+    response = client.delete(
+        f'/treinamentos/{treinamento.id}', headers=token_de(outro_gestor)
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_membro_instrutor_altera_treinamento(
+    client, token_de, membro, criar_treinamento
+):
+    treinamento = criar_treinamento(instrutor_id=membro.id)
+
+    response = client.patch(
+        f'/treinamentos/{treinamento.id}',
+        json={'descricao': 'Nova descrição'},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['descricao'] == 'Nova descrição'
+
+
+def test_desmarcar_modulos_reabre_matricula(
+    client, token_de, membro, treinamento, matricular
+):
+    matricula = matricular(membro, treinamento)
+    url = f'/matriculas/{matricula.id}'
+
+    concluida = client.patch(
+        url,
+        json={'modulos_concluidos': ['mod-1', 'mod-2']},
+        headers=token_de(membro),
+    ).json()
+    assert concluida['status'] == StatusMatricula.CONCLUIDO.value
+    assert concluida['url_certificado']
+
+    parcial = client.patch(
+        url, json={'modulos_concluidos': ['mod-1']}, headers=token_de(membro)
+    ).json()
+    assert parcial['status'] == StatusMatricula.EM_ANDAMENTO.value
+    assert parcial['concluido_em'] is None
+    assert parcial['url_certificado'] is None
+
+    zerada = client.patch(
+        url, json={'modulos_concluidos': []}, headers=token_de(membro)
+    ).json()
+    assert zerada['status'] == StatusMatricula.MATRICULADO.value
+    assert zerada['percentual_progresso'] == 0
 
 
 def test_apaga_treinamento_inexistente(client, token_de, gestor):
@@ -395,9 +453,6 @@ def test_apaga_treinamento_inexistente(client, token_de, gestor):
     )
 
     assert response.status_code == HTTPStatus.NOT_FOUND
-
-
-# ------------------------------------------------------------------ matrícula
 
 
 def test_membro_se_matricula(client, token_de, membro, treinamento):
@@ -649,9 +704,6 @@ def test_obtem_matricula_inexistente(client, token_de, membro):
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
-# ------------------------------------------------------------------ progresso
-
-
 def test_concluir_modulo_atualiza_progresso_e_status(
     client, token_de, membro, treinamento, matricular
 ):
@@ -798,7 +850,7 @@ def test_membro_desiste_do_treinamento(
     assert response.json()['status'] == StatusMatricula.DESISTENTE.value
 
 
-def test_progresso_nao_reabre_matricula_desistente(
+def test_progresso_reabre_matricula_desistente(
     client, token_de, membro, treinamento, matricular
 ):
     matricula = matricular(
@@ -807,12 +859,12 @@ def test_progresso_nao_reabre_matricula_desistente(
 
     response = client.patch(
         f'/matriculas/{matricula.id}',
-        json={'modulos_concluidos': ['mod-1', 'mod-2']},
+        json={'modulos_concluidos': ['mod-1']},
         headers=token_de(membro),
     )
 
     assert response.status_code == HTTPStatus.OK
-    assert response.json()['status'] == StatusMatricula.DESISTENTE.value
+    assert response.json()['status'] == StatusMatricula.EM_ANDAMENTO.value
 
 
 def test_gestor_registra_certificado(

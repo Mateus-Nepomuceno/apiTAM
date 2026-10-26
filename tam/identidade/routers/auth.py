@@ -4,9 +4,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
-from tam.core.security import create_access_token, verify_password
+from tam.core.security import (
+    create_access_token,
+    get_current_user,
+    verify_password,
+)
 from tam.identidade.models import UsuarioModel
-from tam.identidade.schemas import Token
+from tam.identidade.schemas import Token, UsuarioResponse
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 
@@ -40,3 +44,10 @@ async def login_for_access_token(
     )
 
     return {'access_token': access_token, 'token_type': 'bearer'}
+
+
+@router.get('/me', response_model=UsuarioResponse)
+async def usuario_logado(
+    usuario_atual: Annotated[UsuarioModel, Depends(get_current_user)],
+):
+    return usuario_atual

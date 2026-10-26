@@ -11,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from .models import PrioridadeTarefa, StatusTarefa
+from .models import ColunaQuadro, PrioridadeTarefa, StatusTarefa
 
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
@@ -55,7 +55,9 @@ class TarefaBase(BaseModel):
     descricao: Optional[str] = None
     projeto_id: Optional[PydanticObjectId] = None
     responsavel_id: Optional[PydanticObjectId] = None
-    status: StatusTarefa = StatusTarefa.PENDENTE
+    status: Optional[StatusTarefa] = None
+    coluna_quadro: Optional[ColunaQuadro] = None
+    ordem_coluna: int = 0
     prioridade: PrioridadeTarefa = PrioridadeTarefa.MEDIA
     etiquetas: list[str] = Field(default_factory=list)
     checklist: list[ItemChecklistSchema] = Field(default_factory=list)
@@ -88,6 +90,8 @@ class TarefaUpdate(BaseModel):
     projeto_id: Optional[PydanticObjectId] = None
     responsavel_id: Optional[PydanticObjectId] = None
     status: Optional[StatusTarefa] = None
+    coluna_quadro: Optional[ColunaQuadro] = None
+    ordem_coluna: Optional[int] = None
     prioridade: Optional[PrioridadeTarefa] = None
     etiquetas: Optional[list[str]] = None
     checklist: Optional[list[ItemChecklistSchema]] = None
@@ -116,6 +120,8 @@ class TarefaResponse(BaseModel):
     responsavel_id: Optional[PyObjectId] = None
     criador_id: PyObjectId
     status: StatusTarefa
+    coluna_quadro: ColunaQuadro
+    ordem_coluna: int = 0
     prioridade: PrioridadeTarefa
     etiquetas: list[str] = Field(default_factory=list)
     checklist: list[ItemChecklistSchema] = Field(default_factory=list)

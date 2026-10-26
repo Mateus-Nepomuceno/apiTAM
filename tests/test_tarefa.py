@@ -250,7 +250,6 @@ def test_transicao_de_status_acumula_historico_e_data_conclusao(
     assert historico['status_novo'] == StatusTarefa.EM_ANDAMENTO.value
     assert historico['autor_id'] == str(gestor.id)
 
-    # Concluindo a tarefa
     resp_concluida = client.patch(
         f'/tarefas/{tarefa.id}',
         json={'status': 'Concluida'},
@@ -325,7 +324,6 @@ def test_gestor_e_admin_atualizam_qualquer_tarefa(
 ):
     tarefa = criar_tarefa(criador=membro)
 
-    # Gestor atualiza
     res_gestor = client.patch(
         f'/tarefas/{tarefa.id}',
         json={'descricao': 'Alterado por Gestor'},
@@ -333,7 +331,6 @@ def test_gestor_e_admin_atualizam_qualquer_tarefa(
     )
     assert res_gestor.status_code == HTTPStatus.OK
 
-    # Admin atualiza
     res_admin = client.patch(
         f'/tarefas/{tarefa.id}',
         json={'descricao': 'Alterado por Admin'},
@@ -442,3 +439,95 @@ def test_atualizar_com_novo_comentario_e_checklist(
     )
     assert len(corpo['checklist']) == 1
     assert corpo['checklist'][0]['concluido'] is True
+
+
+def test_coluna_quadro_sincroniza_status(client, membro, token_de):
+    response = client.post(
+        '/tarefas/',
+        json={'titulo': 'Kanban', 'coluna_quadro': 'AFazer'},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.CREATED
+    corpo = response.json()
+    assert corpo['coluna_quadro'] == 'AFazer'
+    assert corpo['status'] == StatusTarefa.PENDENTE.value
+
+    response = client.patch(
+        f'/tarefas/{corpo["_id"]}',
+        json={'coluna_quadro': 'Concluido'},
+        headers=token_de(membro),
+    )
+    corpo = response.json()
+    assert corpo['status'] == StatusTarefa.CONCLUIDA.value
+    assert corpo['data_conclusao'] is not None
+
+    response = client.patch(
+        f'/tarefas/{corpo["_id"]}',
+        json={'status': 'EmRevisao'},
+        headers=token_de(membro),
+    )
+    assert response.json()['coluna_quadro'] == 'Revisao'
+
+
+def test_membro_altera_e_apaga_tarefa_do_seu_projeto(
+    client, criar_projeto, criar_tarefa, admin, membro, token_de
+):
+    projeto = criar_projeto(membros_equipe=[membro.id])
+    tarefa = criar_tarefa(criador=admin, projeto_id=projeto.id)
+
+    response = client.patch(
+        f'/tarefas/{tarefa.id}',
+        json={'coluna_quadro': 'EmAndamento'},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.OK
+
+    response = client.delete(f'/tarefas/{tarefa.id}', headers=token_de(membro))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+
+def test_membro_nao_altera_tarefa_de_projeto_alheio(
+    client, criar_projeto, criar_tarefa, admin, membro, token_de
+):
+    projeto = criar_projeto()
+    tarefa = criar_tarefa(criador=admin, projeto_id=projeto.id)
+
+    response = client.patch(
+        f'/tarefas/{tarefa.id}',
+        json={'titulo': 'X'},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_membro_cria_tarefa_apenas_em_projeto_que_participa(
+    client, criar_projeto, membro, token_de
+):
+    alheio = criar_projeto()
+    meu = criar_projeto(membros_equipe=[membro.id])
+
+    response = client.post(
+        '/tarefas/',
+        json={'titulo': 'X', 'projeto_id': str(alheio.id)},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+    response = client.post(
+        '/tarefas/',
+        json={'titulo': 'X', 'projeto_id': str(meu.id)},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.CREATED
+
+
+def test_remover_prazo_da_tarefa(client, criar_tarefa, admin, token_de):
+    tarefa = criar_tarefa()
+
+    response = client.patch(
+        f'/tarefas/{tarefa.id}',
+        json={'data_prazo': None},
+        headers=token_de(admin),
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['data_prazo'] is None

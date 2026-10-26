@@ -29,6 +29,7 @@ class UsuarioUpdate(BaseModel):
     email: Optional[EmailStr] = None
     perfil: Optional[PerfilUsuario] = None
     departamento: Optional[str] = None
+    senha: Optional[str] = None
 
 
 class UsuarioResponse(UsuarioBase):

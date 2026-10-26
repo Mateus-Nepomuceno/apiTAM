@@ -17,7 +17,7 @@ async def init_db():
     client = AsyncMongoClient(settings.DATABASE_URL)
 
     await init_beanie(
-        database=client.tam_db,
+        database=client[settings.DATABASE_NAME],
         document_models=[
             UsuarioModel,
             TreinamentoModel,
