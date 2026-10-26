@@ -120,10 +120,19 @@ async def atualizar_usuario(
         'perfil' in dados_atualizacao
         and dados_atualizacao['perfil'] != usuario.perfil
         and usuario_atual.perfil != PerfilUsuario.ADMIN
+        and (
+            usuario_atual.perfil != PerfilUsuario.GESTOR
+            or dados_atualizacao['perfil'] == PerfilUsuario.ADMIN
+        )
     ):
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
-            detail='Apenas administradores podem alterar o perfil.',
+            detail='Permissão insuficiente para alterar o perfil.',
+        )
+
+    if 'senha' in dados_atualizacao:
+        dados_atualizacao['senha'] = get_password_hash(
+            dados_atualizacao['senha']
         )
 
     if usuario_in.email and usuario_in.email != usuario.email:

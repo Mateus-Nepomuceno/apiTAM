@@ -280,3 +280,47 @@ def test_nao_admin_nao_apaga(client, membro, token_de, request, ator):
 
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert buscar(client, alvo.id) is not None
+
+
+def test_gestor_alterna_perfil_entre_gestor_e_membro(
+    client, gestor, membro, token_de
+):
+    response = client.patch(
+        f'/usuarios/{membro.id}',
+        json={'perfil': 'Gestor'},
+        headers=token_de(gestor),
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['perfil'] == 'Gestor'
+
+
+def test_membro_nao_altera_o_proprio_perfil(client, membro, token_de):
+    response = client.patch(
+        f'/usuarios/{membro.id}',
+        json={'perfil': 'Gestor'},
+        headers=token_de(membro),
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_alterar_senha(client, admin, membro, token_de):
+    response = client.patch(
+        f'/usuarios/{membro.id}',
+        json={'senha': 'nova-senha-456'},
+        headers=token_de(admin),
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert 'senha' not in response.json()
+
+    login = client.post(
+        '/auth/token',
+        data={'username': membro.email, 'password': 'nova-senha-456'},
+    )
+    assert login.status_code == HTTPStatus.OK
+
+
+def test_auth_me_retorna_usuario_logado(client, membro, token_de):
+    response = client.get('/auth/me', headers=token_de(membro))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json()['_id'] == str(membro.id)
+    assert response.json()['perfil'] == 'Membro'
