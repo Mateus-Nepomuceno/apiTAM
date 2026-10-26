@@ -15,8 +15,36 @@ from tam.projeto.models import (
     StatusProjeto,
 )
 from tam.projeto.schemas import ProjetoCreate, ProjetoResponse, ProjetoUpdate
+from tam.tarefa.models import TarefaModel
 
 router = APIRouter(prefix='/projetos', tags=['projetos'])
+
+
+def participa_do_projeto(projeto: ProjetoModel, usuario: UsuarioModel):
+    return (
+        projeto.responsavel_id == usuario.id
+        or usuario.id in projeto.membros_equipe
+    )
+
+
+def _garantir_gestao(projeto: ProjetoModel, usuario: UsuarioModel):
+    if usuario.perfil == PerfilUsuario.ADMIN:
+        return
+    if not participa_do_projeto(projeto, usuario):
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail='Você só pode gerenciar projetos dos quais participa.',
+        )
+
+
+async def _buscar_projeto(projeto_id: PydanticObjectId) -> ProjetoModel:
+    projeto = await ProjetoModel.get(projeto_id)
+    if not projeto:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='Projeto não encontrado.',
+        )
+    return projeto
 
 
 def _normalizar_utc(dt: datetime | None) -> datetime | None:
@@ -38,6 +66,13 @@ async def criar_projeto(
     ],
 ):
     novo_projeto = ProjetoModel(**projeto_in.model_dump())
+    novo_projeto.historico_status = [
+        HistoricoStatus(
+            status_novo=novo_projeto.status,
+            autor_id=usuario_atual.id,
+            nota='Projeto criado',
+        )
+    ]
     await novo_projeto.insert()
     return novo_projeto
 
@@ -94,12 +129,8 @@ async def atualizar_projeto(
         Depends(exigir_perfil(PerfilUsuario.GESTOR, PerfilUsuario.ADMIN)),
     ],
 ):
-    projeto = await ProjetoModel.get(projeto_id)
-    if not projeto:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail='Projeto não encontrado.',
-        )
+    projeto = await _buscar_projeto(projeto_id)
+    _garantir_gestao(projeto, usuario_atual)
 
     dados_atualizacao = projeto_in.model_dump(
         exclude_unset=True, exclude_none=True
@@ -124,12 +155,43 @@ async def atualizar_projeto(
             status_novo=dados_atualizacao['status'],
             data_alteracao=datetime.now(timezone.utc),
             autor_id=usuario_atual.id,
+            nota='Status atualizado',
         )
         projeto.historico_status.append(historico)
 
     for campo, valor in dados_atualizacao.items():
         setattr(projeto, campo, valor)
 
+    await projeto.save()
+    return projeto
+
+
+@router.post(
+    '/{projeto_id}/marcos/{indice}/alternar', response_model=ProjetoResponse
+)
+async def alternar_marco(
+    projeto_id: PydanticObjectId,
+    indice: int,
+    usuario_atual: Annotated[UsuarioModel, Depends(get_current_user)],
+):
+    projeto = await _buscar_projeto(projeto_id)
+
+    if usuario_atual.perfil != PerfilUsuario.ADMIN and not (
+        participa_do_projeto(projeto, usuario_atual)
+    ):
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail='Você não participa deste projeto.',
+        )
+
+    if not 0 <= indice < len(projeto.marcos):
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail='Marco não encontrado.',
+        )
+
+    marco = projeto.marcos[indice]
+    marco.concluido = not marco.concluido
     await projeto.save()
     return projeto
 
@@ -142,11 +204,8 @@ async def apagar_projeto(
         Depends(exigir_perfil(PerfilUsuario.GESTOR, PerfilUsuario.ADMIN)),
     ],
 ):
-    projeto = await ProjetoModel.get(projeto_id)
-    if not projeto:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND,
-            detail='Projeto não encontrado.',
-        )
+    projeto = await _buscar_projeto(projeto_id)
+    _garantir_gestao(projeto, usuario_atual)
 
+    await TarefaModel.find(TarefaModel.projeto_id == projeto.id).delete()
     await projeto.delete()

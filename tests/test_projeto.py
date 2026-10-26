@@ -4,6 +4,9 @@ from http import HTTPStatus
 import pytest
 
 from tam.projeto.models import ProjetoModel, SaudeProjeto, StatusProjeto
+from tam.tarefa.models import TarefaModel
+
+PROGRESSO_INICIAL = 30
 
 
 def buscar(client, projeto_id):
@@ -162,7 +165,9 @@ def test_transicao_de_status_acumula_historico(
     client, criar_projeto, gestor, token_de
 ):
     projeto = criar_projeto(
-        nome='Projeto Auditoria', status=StatusProjeto.PLANEJAMENTO
+        responsavel=gestor,
+        nome='Projeto Auditoria',
+        status=StatusProjeto.PLANEJAMENTO,
     )
 
     response = client.patch(
@@ -184,7 +189,7 @@ def test_transicao_de_status_acumula_historico(
 def test_atualizar_projeto_com_data_entrega_anterior_ao_inicio(
     client, criar_projeto, gestor, token_de
 ):
-    projeto = criar_projeto()
+    projeto = criar_projeto(responsavel=gestor)
 
     response = client.patch(
         f'/projetos/{projeto.id}',
@@ -199,18 +204,22 @@ def test_atualizar_projeto_com_data_entrega_anterior_ao_inicio(
 
 
 @pytest.mark.parametrize(
-    ('ator', 'esperado'),
+    ('ator', 'participa', 'esperado'),
     [
-        ('admin', HTTPStatus.OK),
-        ('gestor', HTTPStatus.OK),
-        ('membro', HTTPStatus.FORBIDDEN),
+        ('admin', False, HTTPStatus.OK),
+        ('gestor', True, HTTPStatus.OK),
+        ('gestor', False, HTTPStatus.FORBIDDEN),
+        ('membro', True, HTTPStatus.FORBIDDEN),
     ],
 )
 def test_permissao_de_edicao_de_projeto(
-    client, criar_projeto, token_de, request, ator, esperado
+    client, criar_projeto, token_de, request, ator, participa, esperado
 ):
-    projeto = criar_projeto(descricao='Descricao Original')
     usuario_ator = request.getfixturevalue(ator)
+    projeto = criar_projeto(
+        descricao='Descricao Original',
+        membros_equipe=[usuario_ator.id] if participa else [],
+    )
 
     response = client.patch(
         f'/projetos/{projeto.id}',
@@ -236,18 +245,21 @@ def test_atualizar_projeto_inexistente(client, gestor, token_de):
 
 
 @pytest.mark.parametrize(
-    ('ator', 'esperado'),
+    ('ator', 'participa', 'esperado'),
     [
-        ('admin', HTTPStatus.NO_CONTENT),
-        ('gestor', HTTPStatus.NO_CONTENT),
-        ('membro', HTTPStatus.FORBIDDEN),
+        ('admin', False, HTTPStatus.NO_CONTENT),
+        ('gestor', True, HTTPStatus.NO_CONTENT),
+        ('gestor', False, HTTPStatus.FORBIDDEN),
+        ('membro', True, HTTPStatus.FORBIDDEN),
     ],
 )
 def test_permissao_de_exclusao_de_projeto(
-    client, criar_projeto, token_de, request, ator, esperado
+    client, criar_projeto, token_de, request, ator, participa, esperado
 ):
-    projeto = criar_projeto()
     usuario_ator = request.getfixturevalue(ator)
+    projeto = criar_projeto(
+        membros_equipe=[usuario_ator.id] if participa else []
+    )
 
     response = client.delete(
         f'/projetos/{projeto.id}', headers=token_de(usuario_ator)
@@ -262,14 +274,13 @@ def test_permissao_de_exclusao_de_projeto(
 
 
 def test_gestor_apaga_projeto(client, criar_projeto, gestor, token_de):
-    projeto = criar_projeto(nome='Projeto Para Apagar')
+    projeto = criar_projeto(responsavel=gestor, nome='Projeto Para Apagar')
 
     response = client.delete(
         f'/projetos/{projeto.id}', headers=token_de(gestor)
     )
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    # Confirmação de que subsequente GET retorna 404
     get_res = client.get(f'/projetos/{projeto.id}', headers=token_de(gestor))
     assert get_res.status_code == HTTPStatus.NOT_FOUND
 
@@ -277,5 +288,78 @@ def test_gestor_apaga_projeto(client, criar_projeto, gestor, token_de):
 def test_apagar_projeto_inexistente(client, gestor, token_de):
     response = client.delete(
         '/projetos/000000000000000000000000', headers=token_de(gestor)
+    )
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_criar_projeto_registra_historico_inicial(client, gestor, token_de):
+    agora = datetime.now(timezone.utc)
+    payload = {
+        'nome': 'Novo',
+        'descricao': '',
+        'responsavel_id': str(gestor.id),
+        'status': 'Ativo',
+        'percentual_progresso': PROGRESSO_INICIAL,
+        'marcos': [{'titulo': 'Marco sem data'}],
+        'data_inicio': agora.isoformat(),
+        'data_entrega': (agora + timedelta(days=1)).isoformat(),
+    }
+    response = client.post(
+        '/projetos/', json=payload, headers=token_de(gestor)
+    )
+    assert response.status_code == HTTPStatus.CREATED
+    corpo = response.json()
+    assert corpo['percentual_progresso'] == PROGRESSO_INICIAL
+    assert corpo['marcos'][0]['data_prevista'] is None
+    assert len(corpo['historico_status']) == 1
+    assert corpo['historico_status'][0]['status_novo'] == 'Ativo'
+    assert corpo['historico_status'][0]['nota'] == 'Projeto criado'
+
+
+def test_apagar_projeto_remove_tarefas(
+    client, criar_projeto, criar_tarefa, admin, token_de
+):
+    projeto = criar_projeto()
+    tarefa = criar_tarefa(projeto_id=projeto.id)
+
+    response = client.delete(
+        f'/projetos/{projeto.id}', headers=token_de(admin)
+    )
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert client.portal.call(TarefaModel.get, tarefa.id) is None
+
+
+@pytest.mark.parametrize(
+    ('ator', 'participa', 'esperado'),
+    [
+        ('admin', False, HTTPStatus.OK),
+        ('membro', True, HTTPStatus.OK),
+        ('membro', False, HTTPStatus.FORBIDDEN),
+        ('gestor', False, HTTPStatus.FORBIDDEN),
+    ],
+)
+def test_alternar_marco(
+    client, criar_projeto, token_de, request, ator, participa, esperado
+):
+    usuario_ator = request.getfixturevalue(ator)
+    projeto = criar_projeto(
+        marcos=[{'titulo': 'M1', 'concluido': False}],
+        membros_equipe=[usuario_ator.id] if participa else [],
+    )
+
+    response = client.post(
+        f'/projetos/{projeto.id}/marcos/0/alternar',
+        headers=token_de(usuario_ator),
+    )
+    assert response.status_code == esperado
+    assert buscar(client, projeto.id).marcos[0].concluido == (
+        esperado == HTTPStatus.OK
+    )
+
+
+def test_alternar_marco_inexistente(client, criar_projeto, admin, token_de):
+    projeto = criar_projeto()
+    response = client.post(
+        f'/projetos/{projeto.id}/marcos/3/alternar', headers=token_de(admin)
     )
     assert response.status_code == HTTPStatus.NOT_FOUND

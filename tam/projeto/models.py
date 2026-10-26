@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional
 
 from beanie import Document, PydanticObjectId
 from pydantic import BaseModel, Field
@@ -21,17 +22,18 @@ class SaudeProjeto(str, Enum):
 
 class Marco(BaseModel):
     titulo: str
-    data_prevista: datetime
+    data_prevista: Optional[datetime] = None
     concluido: bool = False
 
 
 class HistoricoStatus(BaseModel):
-    status_anterior: StatusProjeto
+    status_anterior: Optional[StatusProjeto] = None
     status_novo: StatusProjeto
     data_alteracao: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
     autor_id: PydanticObjectId
+    nota: str = ''
 
 
 class ProjetoModel(Document):
