@@ -15,6 +15,30 @@ class StatusTarefa(str, Enum):
     CANCELADA = 'Cancelada'
 
 
+class ColunaQuadro(str, Enum):
+    BACKLOG = 'Backlog'
+    A_FAZER = 'AFazer'
+    EM_ANDAMENTO = 'EmAndamento'
+    REVISAO = 'Revisao'
+    CONCLUIDO = 'Concluido'
+
+
+STATUS_POR_COLUNA = {
+    ColunaQuadro.BACKLOG: StatusTarefa.PENDENTE,
+    ColunaQuadro.A_FAZER: StatusTarefa.PENDENTE,
+    ColunaQuadro.EM_ANDAMENTO: StatusTarefa.EM_ANDAMENTO,
+    ColunaQuadro.REVISAO: StatusTarefa.EM_REVISAO,
+    ColunaQuadro.CONCLUIDO: StatusTarefa.CONCLUIDA,
+}
+COLUNA_POR_STATUS = {
+    StatusTarefa.PENDENTE: ColunaQuadro.BACKLOG,
+    StatusTarefa.EM_ANDAMENTO: ColunaQuadro.EM_ANDAMENTO,
+    StatusTarefa.EM_REVISAO: ColunaQuadro.REVISAO,
+    StatusTarefa.CONCLUIDA: ColunaQuadro.CONCLUIDO,
+    StatusTarefa.CANCELADA: ColunaQuadro.BACKLOG,
+}
+
+
 class PrioridadeTarefa(str, Enum):
     BAIXA = 'Baixa'
     MEDIA = 'Media'
@@ -53,6 +77,8 @@ class TarefaModel(Document):
     responsavel_id: Optional[PydanticObjectId] = None
     criador_id: PydanticObjectId
     status: StatusTarefa = StatusTarefa.PENDENTE
+    coluna_quadro: ColunaQuadro = ColunaQuadro.BACKLOG
+    ordem_coluna: int = 0
     prioridade: PrioridadeTarefa = PrioridadeTarefa.MEDIA
     etiquetas: list[str] = Field(default_factory=list)
     checklist: list[ItemChecklist] = Field(default_factory=list)
