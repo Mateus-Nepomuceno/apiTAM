@@ -32,6 +32,7 @@ class ModuloTreinamento(BaseModel):
 
 class TreinamentoBase(BaseModel):
     titulo: str
+    descricao: str = ''
     categoria: CategoriaTreinamento
     carga_horaria: int = Field(gt=0)
     modulos: list[ModuloTreinamento] = Field(default_factory=list)
@@ -44,6 +45,7 @@ class TreinamentoCreate(TreinamentoBase):
 class TreinamentoUpdate(BaseModel):
     instrutor_id: Optional[PydanticObjectId] = None
     titulo: Optional[str] = None
+    descricao: Optional[str] = None
     categoria: Optional[CategoriaTreinamento] = None
     carga_horaria: Optional[int] = Field(default=None, gt=0)
     modulos: Optional[list[ModuloTreinamento]] = None

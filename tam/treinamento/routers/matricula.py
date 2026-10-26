@@ -55,6 +55,35 @@ def _garantir_acesso(matricula: MatriculaTreinamentoModel, usuario):
         )
 
 
+def _recalcular_status(
+    matricula: MatriculaTreinamentoModel, modulos_alterados: bool
+):
+    if not modulos_alterados:
+        em_curso = {StatusMatricula.MATRICULADO, StatusMatricula.EM_ANDAMENTO}
+        if matricula.status in em_curso:
+            if matricula.percentual_progresso >= PROGRESSO_COMPLETO:
+                matricula.status = StatusMatricula.CONCLUIDO
+            elif matricula.percentual_progresso > 0:
+                matricula.status = StatusMatricula.EM_ANDAMENTO
+        return
+
+    if matricula.percentual_progresso >= PROGRESSO_COMPLETO:
+        matricula.status = StatusMatricula.CONCLUIDO
+        if not matricula.url_certificado:
+            matricula.url_certificado = (
+                f'#cert-{matricula.treinamento_id}-{matricula.aluno_id}'
+            )
+        return
+
+    matricula.status = (
+        StatusMatricula.EM_ANDAMENTO
+        if matricula.modulos_concluidos
+        else StatusMatricula.MATRICULADO
+    )
+    matricula.concluido_em = None
+    matricula.url_certificado = None
+
+
 @router.post(
     '/', response_model=MatriculaResponse, status_code=HTTPStatus.CREATED
 )
@@ -180,20 +209,18 @@ async def atualizar_matricula(
             )
 
         dados['modulos_concluidos'] = concluidos
-        if 'percentual_progresso' not in dados and ids_validos:
-            dados['percentual_progresso'] = round(
-                len(concluidos) / len(ids_validos) * 100, 2
+        if 'percentual_progresso' not in dados:
+            dados['percentual_progresso'] = (
+                round(len(concluidos) / len(ids_validos) * 100)
+                if ids_validos
+                else 0
             )
 
     for campo, valor in dados.items():
         setattr(matricula, campo, valor)
 
-    em_curso = (StatusMatricula.MATRICULADO, StatusMatricula.EM_ANDAMENTO)
-    if 'status' not in dados and matricula.status in em_curso:
-        if matricula.percentual_progresso >= PROGRESSO_COMPLETO:
-            matricula.status = StatusMatricula.CONCLUIDO
-        elif matricula.percentual_progresso > 0:
-            matricula.status = StatusMatricula.EM_ANDAMENTO
+    if 'status' not in dados:
+        _recalcular_status(matricula, 'modulos_concluidos' in dados)
 
     if (
         matricula.status == StatusMatricula.CONCLUIDO

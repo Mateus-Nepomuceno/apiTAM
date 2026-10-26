@@ -27,6 +27,18 @@ GestaoTreinamento = Annotated[
 ]
 
 
+def _garantir_dono(treinamento: TreinamentoModel, usuario: UsuarioModel):
+    if (
+        usuario.perfil != PerfilUsuario.ADMIN
+        and treinamento.instrutor_id != usuario.id
+    ):
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail='Apenas o instrutor ou um administrador pode alterar '
+            'este treinamento.',
+        )
+
+
 async def _garantir_instrutor(instrutor_id: PydanticObjectId):
     if not await UsuarioModel.get(instrutor_id):
         raise HTTPException(
@@ -96,7 +108,7 @@ async def obter_treinamento(
 async def atualizar_treinamento(
     treinamento_id: PydanticObjectId,
     treinamento_in: TreinamentoUpdate,
-    usuario_atual: GestaoTreinamento,
+    usuario_atual: Annotated[UsuarioModel, Depends(get_current_user)],
 ):
     treinamento = await TreinamentoModel.get(treinamento_id)
     if not treinamento:
@@ -104,6 +116,7 @@ async def atualizar_treinamento(
             status_code=HTTPStatus.NOT_FOUND,
             detail='Treinamento não encontrado.',
         )
+    _garantir_dono(treinamento, usuario_atual)
 
     dados_atualizacao = treinamento_in.model_dump(
         exclude_unset=True, exclude_none=True
@@ -122,7 +135,7 @@ async def atualizar_treinamento(
 @router.delete('/{treinamento_id}', status_code=HTTPStatus.NO_CONTENT)
 async def apagar_treinamento(
     treinamento_id: PydanticObjectId,
-    usuario_atual: GestaoTreinamento,
+    usuario_atual: Annotated[UsuarioModel, Depends(get_current_user)],
 ):
     treinamento = await TreinamentoModel.get(treinamento_id)
     if not treinamento:
@@ -130,14 +143,9 @@ async def apagar_treinamento(
             status_code=HTTPStatus.NOT_FOUND,
             detail='Treinamento não encontrado.',
         )
+    _garantir_dono(treinamento, usuario_atual)
 
-    possui_matriculas = await MatriculaTreinamentoModel.find_one(
+    await MatriculaTreinamentoModel.find(
         MatriculaTreinamentoModel.treinamento_id == treinamento.id
-    )
-    if possui_matriculas:
-        raise HTTPException(
-            status_code=HTTPStatus.CONFLICT,
-            detail='Não é possível apagar um treinamento com matrículas.',
-        )
-
+    ).delete()
     await treinamento.delete()

@@ -14,6 +14,7 @@ from .schemas import (
 class TreinamentoModel(Document):
     instrutor_id: PydanticObjectId
     titulo: str
+    descricao: str = ''
     categoria: CategoriaTreinamento
     carga_horaria: int
     modulos: list[ModuloTreinamento] = Field(default_factory=list)
